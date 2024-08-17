@@ -57,7 +57,7 @@
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN EV */
-
+extern volatile uint8_t led_blink_flag;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -187,7 +187,8 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  if (HAL_GetTick() % 500 == 0)
+    led_blink_flag = 1;
   /* USER CODE END SysTick_IRQn 1 */
 }
 

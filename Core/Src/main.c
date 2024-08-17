@@ -43,7 +43,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+volatile uint8_t led_blink_flag = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,6 +100,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    if (led_blink_flag) {
+      led_blink_flag = 0;
+      LL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
