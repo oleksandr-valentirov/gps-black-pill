@@ -58,6 +58,7 @@
 extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN EV */
 extern volatile uint8_t led_blink_flag;
+extern volatile uint8_t gps_data_ready_flag;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -205,7 +206,10 @@ void SysTick_Handler(void)
 void DMA2_Stream2_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA2_Stream2_IRQn 0 */
-
+  if (LL_DMA_IsActiveFlag_TC2(DMA2)) {
+    LL_DMA_ClearFlag_TC2(DMA2);
+    gps_data_ready_flag = 1;
+  }
   /* USER CODE END DMA2_Stream2_IRQn 0 */
 
   /* USER CODE BEGIN DMA2_Stream2_IRQn 1 */

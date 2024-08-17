@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ubx.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +44,7 @@
 
 /* USER CODE BEGIN PV */
 volatile uint8_t led_blink_flag = 0;
+volatile uint8_t gps_data_ready_flag = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -68,7 +69,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  ubx_status ubx_status = UBX_OK;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -93,7 +94,10 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_Delay(5000);
+  if ((ubx_status = UBX_Init(DMA2, USART1))) {
+    while (1) {}
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -103,6 +107,10 @@ int main(void)
     if (led_blink_flag) {
       led_blink_flag = 0;
       LL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    }
+    if (gps_data_ready_flag) {
+      gps_data_ready_flag = 0;
+      UBX_ProcessData();
     }
     /* USER CODE END WHILE */
 
