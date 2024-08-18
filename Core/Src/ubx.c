@@ -3,6 +3,8 @@
 #include "stm32f4xx_ll_dma.h"
 #include "stm32f4xx_ll_usart.h"
 #include "ubx.h"
+#include "usbd_cdc_if.h"
+#include "out_protocol.h"
 
 /* defines */
 #define BUFF_LENGTH     256
@@ -39,6 +41,8 @@
 
 #define UART_CHAR_LEN   (3 << 6)
 #define UART_PARITI     (4 << 9)
+
+#define PVT_GNSS_FIX_OK 1
 
 /* macros */
 #define CALC_CRC_RANGE(len) (sizeof(ubx_header) - UBX_SYNC_SIZE + len)
@@ -169,12 +173,42 @@ ubx_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx) {
 ubx_status UBX_ProcessData(void) {
     ubx_header *rx_header = (ubx_header *)buffer;
     ubx_nav_pvt *rx_data = (ubx_nav_pvt *)(buffer + sizeof(ubx_header));
+    uint32_t cur_time = 0, start_time = 0;
+    uint8_t out_buf[sizeof(out_header) + sizeof(ubx_output)] = {0};
+    out_header *out_h = (out_header *)out_buf;
+    ubx_output *output = (ubx_output *)(out_buf + sizeof(out_header));
 
     /* check all possible errors */
     if (ubx_calc_crc(2, CALC_CRC_RANGE(rx_header->length)) != *((uint16_t*)(buffer + sizeof(ubx_header) + rx_header->length)))
         return UBX_CRC_ERROR;
-    if (rx_data->fixType < Fix2D || rx_data->fixType > GNSS_DeadReckoning)
+    if ((!(rx_data->fixFlags & PVT_GNSS_FIX_OK)) || (rx_data->fixType < Fix2D || rx_data->fixType > GNSS_DeadReckoning))
         return UBX_BadFix;
+
+    out_h->sync1 = 71;
+    out_h->sync2 = 73;
+    out_h->length = sizeof(ubx_output);
+    out_h->classID = 1;
+    output->lon = rx_data->lon;
+    output->lat = rx_data->lat;
+    output->gSpeed = rx_data->gSpeed;
+    output->heading = rx_data->headMot;
+    output->velN = rx_data->velN;
+    output->velE = rx_data->velE;
+    output->nano = rx_data->nano;
+    output->year = rx_data->year;
+    output->month = rx_data->month;
+    output->day = rx_data->day;
+    output->hour = rx_data->hour;
+    output->min = rx_data->min;
+    output->sec = rx_data->sec;
+    /* ToDo - add checksum calculation */
+
+    start_time = HAL_GetTick();
+    while (CDC_Transmit_FS(out_buf, sizeof(ubx_output) + sizeof(out_header)) != USBD_OK) {
+        cur_time = HAL_GetTick();
+        if (cur_time - start_time >= 100)
+            return UBX_TIMEOUT;
+    }
 
     return UBX_OK;
 }
