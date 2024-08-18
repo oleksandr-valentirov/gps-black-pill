@@ -260,7 +260,7 @@ static ubx_status set_ports(void) {
     ubx_status status = UBX_OK;
     ubx_header *rx_header = (ubx_header *)buffer;
     ubx_ack_nack *rx_data = (ubx_ack_nack *)(buffer + sizeof(ubx_header));
-    uint8_t i = 0;
+    uint8_t i = 0, r = 0;
     ubx_header header = {.sync1 = 0xb5, .sync2 = 0x62, .class_id = CFG_CLASS_ID, .msg_id = CFG_PRT_ID, .length = 20};
     ubx_cfg_prt config[1] = {
         {
@@ -275,21 +275,35 @@ static ubx_status set_ports(void) {
     };
 
     for (i = 0; i < 1; i++) {
-        status = poll_tx(&header, (uint8_t *)(config + i));
-        if (status)
+        for (r = 5; r > 0; r--) {
+            status = poll_tx(&header, (uint8_t *)(config + i));
+            if (status)
+                continue;
+            status = poll_rx(sizeof(ubx_header) + sizeof(ubx_ack_nack) + UBX_CRC_SIZE);
+            if (status)
+                continue;
+            /* check all possible errors */
+            if (ubx_calc_crc(2, CALC_CRC_RANGE(rx_header->length)) != *((uint16_t*)(buffer + sizeof(ubx_header) + rx_header->length))) {
+                status = UBX_CRC_ERROR;
+                continue;
+            }
+            if (rx_header->class_id != ACK_CLASS_ID || rx_data->class_id != header.class_id) {
+                status = UBX_CFG_MSG_CLASSID_ERROR;
+                continue;
+            }
+            if (rx_data->msg_id != header.msg_id) {
+                status = UBX_CFG_MSG_MSGID_ERROR;
+                continue;
+            }
+            if (rx_header->msg_id == NACK_MSG_ID) {
+                status = UBX_NACK;
+                continue;
+            }
+            if (status == UBX_OK)
+                break;
+        }
+        if (!r)
             return status;
-        status = poll_rx(sizeof(ubx_header) + sizeof(ubx_ack_nack) + UBX_CRC_SIZE);
-        if (status)
-            return status;
-        /* check all possible errors */
-        if (ubx_calc_crc(2, CALC_CRC_RANGE(rx_header->length)) != *((uint16_t*)(buffer + sizeof(ubx_header) + rx_header->length)))
-            return UBX_CRC_ERROR;
-        if (rx_header->class_id != ACK_CLASS_ID || rx_data->class_id != header.class_id)
-            return UBX_CFG_MSG_CLASSID_ERROR;
-        if (rx_data->msg_id != header.msg_id)
-            return UBX_CFG_MSG_MSGID_ERROR;
-        if (rx_header->msg_id == NACK_MSG_ID)
-            return UBX_NACK;
     }
 
     return UBX_OK;
