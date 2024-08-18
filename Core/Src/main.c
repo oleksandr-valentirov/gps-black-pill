@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ubx.h"
+#include "out_protocol.h"
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,6 +72,10 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   ubx_status ubx_status = UBX_OK;
+  uint32_t cur_time = 0, start_time = 0;
+  uint8_t out_buf[sizeof(out_header) + sizeof(error_output)] = {0};
+  out_header *out_h = (out_header *)out_buf;
+  error_output *output = (error_output *)(out_buf + sizeof(out_header));
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -110,7 +116,21 @@ int main(void)
     }
     if (gps_data_ready_flag) {
       gps_data_ready_flag = 0;
-      UBX_ProcessData();
+      if ((ubx_status = UBX_ProcessData()) && ubx_status != UBX_TIMEOUT) {
+        out_h->sync1 = 71;
+        out_h->sync2 = 73;
+        out_h->length = sizeof(error_output);
+        out_h->classID = 0;
+        output->error = ubx_status;
+        /* ToDo - add checksum calculation */
+
+        start_time = HAL_GetTick();
+        while (CDC_Transmit_FS(out_buf, sizeof(error_output) + sizeof(out_header)) != USBD_OK) {
+            cur_time = HAL_GetTick();
+            if (cur_time - start_time >= 100)
+                break;
+        }
+      }
     }
     /* USER CODE END WHILE */
 

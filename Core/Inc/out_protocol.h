@@ -24,5 +24,9 @@ typedef struct ubx_output {
     uint8_t     hour;
     uint8_t     min;
     uint8_t     sec;
-    uint8_t     reserved;
+    uint8_t     fixType;
 } ubx_output;
+
+typedef struct error_output {
+    uint32_t error;
+} error_output;

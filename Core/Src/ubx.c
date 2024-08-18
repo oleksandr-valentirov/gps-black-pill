@@ -201,6 +201,7 @@ ubx_status UBX_ProcessData(void) {
     output->hour = rx_data->hour;
     output->min = rx_data->min;
     output->sec = rx_data->sec;
+    output->fixType = rx_data->fixType;
     /* ToDo - add checksum calculation */
 
     start_time = HAL_GetTick();

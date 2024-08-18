@@ -4,6 +4,16 @@ import ctypes
 import sys
 from serial.tools import list_ports
 
+fix_type = {
+    2: "2D-fix",
+    3: "3D-fix",
+    4: "GNSS+DeadReckoning"
+}
+
+errors = {
+    9: "UBX Bad fix"
+}
+
 # Створюємо функцію для парсингу аргументів командного рядка
 def parse_args():
     parser = argparse.ArgumentParser(description='Парсинг даних з COM-порту.')
@@ -46,7 +56,12 @@ class Data(ctypes.LittleEndianStructure):
         ("hour", ctypes.c_uint8),
         ("minute", ctypes.c_uint8),
         ("sec", ctypes.c_uint8),
-        ("reserved", ctypes.c_uint8)
+        ("fixType", ctypes.c_uint8)
+    ]
+
+class Error(ctypes.LittleEndianStructure):
+    _fields_ = [
+        ("error", ctypes.c_uint32)
     ]
 
 def process_data(ser):
@@ -70,19 +85,23 @@ def process_data(ser):
                 header = Header.from_buffer_copy(bytes(sync1) + bytes(sync2) + header_data)
                 
                 # Читаємо дані
-                data = ser.read(data_size)
-                if len(data) != data_size:
+                data = ser.read(header.length)
+                if len(data) != header.length:
                     print("Помилка: недостатньо байтів для даних.")
                     continue
-                
-                # Розпаковуємо дані
-                data_struct = Data.from_buffer_copy(data)
-                
-                # Виводимо результат
-                print(f"lon: {data_struct.lon / 1e7}")
-                print(f"lat: {data_struct.lat / 1e7}")
-                print(f"{data_struct.day}/{data_struct.month}/{data_struct.year} {data_struct.hour}:{data_struct.minute}:{data_struct.sec}")
-                print("###########################################")
+                if header.length == 36:
+                    # Розпаковуємо дані
+                    data_struct = Data.from_buffer_copy(data)
+                    
+                    # Виводимо результат
+                    print(f"lon: {data_struct.lon / 1e7}")
+                    print(f"lat: {data_struct.lat / 1e7}")
+                    print(f"Fix: {fix_type[data_struct.fixType]}")
+                    print(f"{data_struct.day:02}/{data_struct.month:02}/{data_struct.year} {data_struct.hour:02}:{data_struct.minute:02}:{data_struct.sec:02}")
+                    print("###########################################")
+                elif header.length == 4:
+                    data_struct = Error.from_buffer_copy(data)
+                    print(f"Error: {errors[data_struct.error]}" )
 
 def main():
     args = parse_args()
