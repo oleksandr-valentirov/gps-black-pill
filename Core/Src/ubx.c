@@ -1,6 +1,5 @@
 /* includes */
 #include <string.h>
-#include <math.h>
 #include "stm32f4xx_ll_dma.h"
 #include "stm32f4xx_ll_usart.h"
 #include "ubx.h"
@@ -200,6 +199,7 @@ ubx_status UBX_ProcessData(void) {
     static uint8_t rc_sync_bits = 0;
     int32_t dateHour = 0, timeFromHourStart = 0;
     int gps_bearing = 0, gps_altitude = 0, gps_speed = 0;
+    double hMSL_km = 0, gSpeed_kmh = 0;
 
     do {
         if ((((uint8_t *)rx_header) + sizeof(ubx_header) + rx_header->length + UBX_CRC_SIZE) > (buffer + BUFF_LENGTH)) {
@@ -230,10 +230,21 @@ ubx_status UBX_ProcessData(void) {
                 dateHour = (pvt->year - 2000) * 8928 + (pvt->month - 1) * 744 + (pvt->day - 1) * 24 + pvt->hour;
                 timeFromHourStart = pvt->min * 30000 + pvt->sec * 500 + (pvt->nano / 1000000.0) / 2;
 
-                gps_bearing = (int)round((double)pvt->headMot / 1000.0);
-                gps_bearing = gps_bearing > 0 ? gps_bearing : 0;
-                gps_altitude = ((double)pvt->hMSL * 1e-3) > 6000.f ? ((int)fmax(0.0, round(((double)pvt->hMSL * 1e-3) + 500.f)) & 0x7FFF) | 0x8000 : (int)fmax(0.0, round((((double)pvt->hMSL * 1e-3) + 500.f) * 10.f)) & 0x7FFF;
-                gps_speed = ((double)pvt->gSpeed * 0.0036) > 600.f ? ((int)(fmax(0.0, round(((double)pvt->gSpeed * 0.0036) * 10.f))) & 0x7FFF) | 0x8000 : (int)(fmax(0.0, round(((double)pvt->gSpeed * 0.0036)  * 100.f))) & 0x7FFF;
+                gps_bearing = (pvt->headMot > 0) ? (int)((pvt->headMot + 500) / 1000) : 0;
+                
+                hMSL_km = pvt->hMSL * 1e-3;
+                if (hMSL_km > 6.0) {
+                    gps_altitude = (((int)(hMSL_km + 0.5)) & 0x7FFF) | 0x8000;
+                } else {
+                    gps_altitude = (((int)((hMSL_km + 0.5) * 10)) & 0x7FFF);
+                }
+
+                gSpeed_kmh = pvt->gSpeed * 0.0036;
+                if (gSpeed_kmh > 600.0) {
+                    gps_speed = (((int)(gSpeed_kmh * 10)) & 0x7FFF) | 0x8000;
+                } else {
+                    gps_speed = (((int)(gSpeed_kmh * 100)) & 0x7FFF);
+                }
 
                 out_buf[0] = ((rc_sync_bits & 0x7) << 5) | ((timeFromHourStart >> 16) & 0x1F);
                 out_buf[1] = timeFromHourStart >> 8;
