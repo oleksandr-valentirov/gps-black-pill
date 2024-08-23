@@ -116,21 +116,7 @@ int main(void)
     }
     if (gps_data_ready_flag) {
       gps_data_ready_flag = 0;
-      if ((ubx_status = UBX_ProcessData()) && ubx_status != UBX_TIMEOUT) {
-        out_h->sync1 = 71;
-        out_h->sync2 = 73;
-        out_h->length = sizeof(error_output);
-        out_h->classID = 0;
-        output->error = ubx_status;
-        /* ToDo - add checksum calculation */
-
-        start_time = HAL_GetTick();
-        while (CDC_Transmit_FS(out_buf, sizeof(error_output) + sizeof(out_header)) != USBD_OK) {
-            cur_time = HAL_GetTick();
-            if (cur_time - start_time >= 100)
-                break;
-        }
-      }
+      UBX_ProcessData();
     }
     /* USER CODE END WHILE */
 

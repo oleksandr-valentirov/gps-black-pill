@@ -1,5 +1,6 @@
 /* includes */
 #include <string.h>
+#include <math.h>
 #include "stm32f4xx_ll_dma.h"
 #include "stm32f4xx_ll_usart.h"
 #include "ubx.h"
@@ -33,6 +34,7 @@
 #define CFG_MSG_ID      0x01
 #define CFG_PRT_ID      0x00
 #define CFG_RATE_ID     0x08
+#define NAV_DOP_ID      0x04
 
 #define PROTO_UBX       1
 #define PROTO_NMEA      2
@@ -45,7 +47,9 @@
 #define PVT_GNSS_FIX_OK 1
 
 /* macros */
-#define CALC_CRC_RANGE(len) (sizeof(ubx_header) - UBX_SYNC_SIZE + len)
+#define CALC_CRC_RANGE(len) (sizeof(ubx_header) - (UBX_SYNC_SIZE) + (len))
+#define CALC_CRC_OFFSET(cur_pos, start_pos) (UBX_SYNC_SIZE + (cur_pos) - (start_pos))
+#define FETCH_CRC(cur_pos, len) (sizeof(ubx_header) + (cur_pos) + (len))
 
 /* data structures */
 typedef struct ubx_header {
@@ -96,6 +100,18 @@ typedef struct ubx_nav_pvt {
     // int16_t     magDec;
     // uint16_t    magAcc;
 } ubx_nav_pvt;
+
+typedef struct ubx_nav_dop
+{
+    uint32_t    itow;
+    uint16_t    gdop;
+    uint16_t    pdop;
+    uint16_t    tdop;
+    uint16_t    vdop;
+    uint16_t    hdop;
+    uint16_t    ndop;
+    uint16_t    edop;
+} ubx_nav_dop;
 
 typedef struct ubx_cfg_prt {
     uint8_t     portID;
@@ -172,44 +188,94 @@ ubx_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx) {
 
 ubx_status UBX_ProcessData(void) {
     ubx_header *rx_header = (ubx_header *)buffer;
-    ubx_nav_pvt *rx_data = (ubx_nav_pvt *)(buffer + sizeof(ubx_header));
-    uint32_t cur_time = 0, start_time = 0;
-    uint8_t out_buf[sizeof(out_header) + sizeof(ubx_output)] = {0};
-    out_header *out_h = (out_header *)out_buf;
-    ubx_output *output = (ubx_output *)(out_buf + sizeof(out_header));
+    ubx_nav_pvt *pvt = NULL;
+    ubx_nav_dop *dop = NULL;
+    uint8_t out_buf[50] = {0};
 
-    /* check all possible errors */
-    if (ubx_calc_crc(2, CALC_CRC_RANGE(rx_header->length)) != *((uint16_t*)(buffer + sizeof(ubx_header) + rx_header->length)))
-        return UBX_CRC_ERROR;
-    if ((!(rx_data->fixFlags & PVT_GNSS_FIX_OK)) || (rx_data->fixType < Fix2D || rx_data->fixType > GNSS_DeadReckoning))
-        return UBX_BadFix;
+/*
+ * racechrono BLE proto description
+ * https://github.com/aollin/racechrono-ble-diy-device?tab=readme-ov-file
+ */
+    static int32_t prevDateHour = 0;
+    static uint8_t rc_sync_bits = 0;
+    int32_t dateHour = 0, timeFromHourStart = 0;
+    int gps_bearing = 0, gps_altitude = 0, gps_speed = 0;
 
-    out_h->sync1 = 71;
-    out_h->sync2 = 73;
-    out_h->length = sizeof(ubx_output);
-    out_h->classID = 1;
-    output->lon = rx_data->lon;
-    output->lat = rx_data->lat;
-    output->gSpeed = rx_data->gSpeed;
-    output->heading = rx_data->headMot;
-    output->velN = rx_data->velN;
-    output->velE = rx_data->velE;
-    output->nano = rx_data->nano;
-    output->year = rx_data->year;
-    output->month = rx_data->month;
-    output->day = rx_data->day;
-    output->hour = rx_data->hour;
-    output->min = rx_data->min;
-    output->sec = rx_data->sec;
-    output->fixType = rx_data->fixType;
-    /* ToDo - add checksum calculation */
+    do {
+        if ((((uint8_t *)rx_header) + sizeof(ubx_header) + rx_header->length + UBX_CRC_SIZE) > (buffer + BUFF_LENGTH)) {
+            /* check overflow */
+            break;
+        }
+        if (!(rx_header->sync1 == 0xb5 && rx_header->sync2 == 0x62)) {
+            /* check sync */
+            rx_header = (ubx_header *)(((uint8_t *)rx_header) + 1);
+            continue;
+        }
+        if (ubx_calc_crc(CALC_CRC_OFFSET((uint8_t *)rx_header, buffer), CALC_CRC_RANGE(rx_header->length)) != *((uint16_t*)(FETCH_CRC((uint8_t *)rx_header, rx_header->length)))) {
+            /* check CRC and go to the next msg in case of error */
+            rx_header = (ubx_header *)(((uint8_t *)rx_header) + sizeof(ubx_header) + rx_header->length + UBX_CRC_SIZE);
+            continue;
+        }
 
-    start_time = HAL_GetTick();
-    while (CDC_Transmit_FS(out_buf, sizeof(ubx_output) + sizeof(out_header)) != USBD_OK) {
-        cur_time = HAL_GetTick();
-        if (cur_time - start_time >= 100)
-            return UBX_TIMEOUT;
-    }
+        /* check header to choose processing methond */
+        if (rx_header->class_id == NAV_CLASS_ID) {
+            if (rx_header->msg_id == NAV_PVT_ID) {
+                pvt = (ubx_nav_pvt *)(((uint8_t *)rx_header) + sizeof(ubx_header));
+#if 0
+                /* check validity */
+                if ((!(pvt->fixFlags & PVT_GNSS_FIX_OK)) || (pvt->fixType > Fix3D))
+                    continue;
+#endif
+
+                dateHour = (pvt->year - 2000) * 8928 + (pvt->month - 1) * 744 + (pvt->day - 1) * 24 + pvt->hour;
+                timeFromHourStart = pvt->min * 30000 + pvt->sec * 500 + (pvt->nano / 1000000.0) / 2;
+
+                gps_bearing = (int)round((double)pvt->headMot / 1000.0);
+                gps_bearing = gps_bearing > 0 ? gps_bearing : 0;
+                gps_altitude = ((double)pvt->hMSL * 1e-3) > 6000.f ? ((int)fmax(0.0, round(((double)pvt->hMSL * 1e-3) + 500.f)) & 0x7FFF) | 0x8000 : (int)fmax(0.0, round((((double)pvt->hMSL * 1e-3) + 500.f) * 10.f)) & 0x7FFF;
+                gps_speed = ((double)pvt->gSpeed * 0.0036) > 600.f ? ((int)(fmax(0.0, round(((double)pvt->gSpeed * 0.0036) * 10.f))) & 0x7FFF) | 0x8000 : (int)(fmax(0.0, round(((double)pvt->gSpeed * 0.0036)  * 100.f))) & 0x7FFF;
+
+                out_buf[0] = ((rc_sync_bits & 0x7) << 5) | ((timeFromHourStart >> 16) & 0x1F);
+                out_buf[1] = timeFromHourStart >> 8;
+                out_buf[2] = timeFromHourStart;
+                out_buf[3] = (pvt->fixType << 6) | (pvt->numSv & 0x3F);
+                out_buf[4] = pvt->lat >> 24;
+                out_buf[5] = pvt->lat >> 16;
+                out_buf[6] = pvt->lat >> 8;
+                out_buf[7] = pvt->lat;
+                out_buf[8] = pvt->lon >> 24;
+                out_buf[9] = pvt->lon >> 16;
+                out_buf[10] = pvt->lon >> 8;
+                out_buf[11] = pvt->lon;
+                out_buf[12] = gps_altitude >> 8;
+                out_buf[13] = gps_altitude;
+                out_buf[14] = gps_speed >> 8;
+                out_buf[15] = gps_speed;
+                out_buf[16] = gps_bearing >> 8;
+                out_buf[17] = gps_bearing;
+            } else if (rx_header->msg_id == NAV_DOP_ID) {
+                dop = (ubx_nav_dop *)(((uint8_t *)rx_header) + sizeof(ubx_header));
+                out_buf[18] = dop->hdop / 10;
+                out_buf[19] = dop->vdop / 10;
+            }
+
+            /* update data */
+
+            if (prevDateHour != dateHour) {
+                /* check date & hour */
+                prevDateHour = dateHour;
+                rc_sync_bits++;
+                out_buf[0] = ((rc_sync_bits & 0x7) << 5) | ((dateHour >> 16) & 0x1F);
+                out_buf[1] = dateHour >> 8;
+                out_buf[2] = dateHour;
+                /* update data */
+
+            }
+        }
+
+        /* check next header */
+        rx_header = (ubx_header *)(((uint8_t *)rx_header) + sizeof(ubx_header) + rx_header->length + UBX_CRC_SIZE);
+    } while(((((uint8_t *)rx_header) + sizeof(ubx_header)) < (buffer + BUFF_LENGTH)) && rx_header->sync1 == 0xb5 && rx_header->sync2 == 0x62);
 
     return UBX_OK;
 }
