@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/ubx.c
     Core/Src/adxl345.c
+    Core/Src/bq25895.c
 )
 
 # Add include paths

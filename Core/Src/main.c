@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "ubx.h"
 #include "adxl345.h"
+#include "bq25895.h"
 #include "out_protocol.h"
 #include "usbd_cdc_if.h"
 /* USER CODE END Includes */
@@ -56,6 +57,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -75,6 +77,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
   ubx_status ubx_status = UBX_OK;
   adxl345_status acc_status = ADXL345_OK;
+  sys_status status = STATUS_OK;
   uint32_t cur_time = 0, start_time = 0;
   uint8_t out_buf[sizeof(out_header) + sizeof(error_output)] = {0};
   out_header *out_h = (out_header *)out_buf;
@@ -103,8 +106,13 @@ int main(void)
   MX_USART1_UART_Init();
   MX_SPI1_Init();
   MX_USB_DEVICE_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(5000);
+  if ((status = BQ25895_Init(I2C1))) {
+    /* block main, because PMU is a core subsystem */
+    while (1) {}
+  }
   if ((ubx_status = UBX_Init(DMA2, USART1))) {
     /* block main, because GPS is a core device */
     while (1) {}
@@ -128,6 +136,9 @@ int main(void)
     if (gps_data_ready_flag) {
       gps_data_ready_flag = 0;
       UBX_ProcessData();
+    }
+    if (pmu_int_flag) {
+      BQ25895_ProcessInterrupt();
     }
     /* USER CODE END WHILE */
 
@@ -184,6 +195,61 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_TWICE);
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  LL_I2C_InitTypeDef I2C_InitStruct = {0};
+
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB);
+  /**I2C1 GPIO Configuration
+  PB6   ------> I2C1_SCL
+  PB7   ------> I2C1_SDA
+  */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_OPENDRAIN;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  GPIO_InitStruct.Alternate = LL_GPIO_AF_4;
+  LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* Peripheral clock enable */
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_I2C1);
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+
+  /** I2C Initialization
+  */
+  LL_I2C_DisableOwnAddress2(I2C1);
+  LL_I2C_DisableGeneralCall(I2C1);
+  LL_I2C_EnableClockStretching(I2C1);
+  I2C_InitStruct.PeripheralMode = LL_I2C_MODE_I2C;
+  I2C_InitStruct.ClockSpeed = 100000;
+  I2C_InitStruct.DutyCycle = LL_I2C_DUTYCYCLE_2;
+  I2C_InitStruct.OwnAddress1 = 0;
+  I2C_InitStruct.TypeAcknowledge = LL_I2C_ACK;
+  I2C_InitStruct.OwnAddrSize = LL_I2C_OWNADDRESS1_7BIT;
+  LL_I2C_Init(I2C1, &I2C_InitStruct);
+  LL_I2C_SetOwnAddress2(I2C1, 0);
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
