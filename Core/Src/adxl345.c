@@ -26,16 +26,16 @@ static uint32_t cs_pin = 0xFFFFFFFF;
 /* data structures */
 
 /* function prototypes */
-static adxl345_status poll_tx(uint8_t addr, uint8_t data);
+static sys_status poll_tx(uint8_t addr, uint8_t data);
 static adxl345_status poll_rx(uint8_t addr, uint8_t length, uint8_t *dest);
 static inline uint32_t convert_data(uint16_t data);
 
 
-adxl345_status ADXL345_Init(DMA_TypeDef *DMAx, uint32_t streamx, SPI_TypeDef *SPIx, GPIO_TypeDef *cs_portx, uint32_t cs_pinx) {
-    adxl345_status status = ADXL345_OK;
+sys_status ADXL345_Init(DMA_TypeDef *DMAx, uint32_t streamx, SPI_TypeDef *SPIx, GPIO_TypeDef *cs_portx, uint32_t cs_pinx) {
+    sys_status status = STATUS_OK;
 
     if (!SPIx || !DMAx || !cs_portx)
-        return ADXL345_INIT_ERROR;
+        return NULL_ARG_ERR;
     acc_spi = SPIx;
     dma = DMAx;
     cs_port = cs_portx;
@@ -63,10 +63,10 @@ adxl345_status ADXL345_Init(DMA_TypeDef *DMAx, uint32_t streamx, SPI_TypeDef *SP
     if ((status = poll_tx(ADXL345_INT_ENABLE, ADXL345_INT_DATA_READY)))
         return status;
 
-    return ADXL345_OK;
+    return STATUS_OK;
 }
 
-adxl345_status adxl345_ProcessInterrupt(void) {
+sys_status adxl345_ProcessInterrupt(void) {
     static uint8_t ring_buf_i = 0;  /* it is needed to track some number of latest FIFOs */
     uint32_t cur_time = 0, start_time = 0;
 
@@ -114,43 +114,39 @@ adxl345_status adxl345_ProcessInterrupt(void) {
         while (!LL_SPI_IsActiveFlag_TXE(acc_spi) || LL_SPI_IsActiveFlag_BSY(acc_spi)) {
             cur_time = HAL_GetTick();
             if (cur_time - start_time >= TIMEOUT_MS)
-                return ADXL345_TIMEOUT;
+                return TIMEOUT_ERR;
         }
         /* transmit addr */
         LL_SPI_TransmitData8(acc_spi, ADXL345_DATAX0 | 0x80 | 0x40);
     }
 
-    return ADXL345_OK;
+    return STATUS_OK;
 }
 
-adxl345_status ADXL345_ProcessData(void) {
-    return ADXL345_OK;
-}
-
-static adxl345_status poll_tx(uint8_t addr, uint8_t data) {
+static sys_status poll_tx(uint8_t addr, uint8_t data) {
     uint32_t cur_time = 0, start_time = 0;
 
     CS_PIN_LOW(cs_port, cs_pin);
     while (!LL_SPI_IsActiveFlag_TXE(acc_spi) || LL_SPI_IsActiveFlag_BSY(acc_spi)) {
         cur_time = HAL_GetTick();
         if (cur_time - start_time >= TIMEOUT_MS)
-            return ADXL345_TIMEOUT;
+            return TIMEOUT_ERR;
     }
     LL_SPI_TransmitData8(acc_spi, addr);
     while (!LL_SPI_IsActiveFlag_TXE(acc_spi) || LL_SPI_IsActiveFlag_BSY(acc_spi)) {
         cur_time = HAL_GetTick();
         if (cur_time - start_time >= TIMEOUT_MS)
-            return ADXL345_TIMEOUT;
+            return TIMEOUT_ERR;
     }
     LL_SPI_TransmitData8(acc_spi, data);
     while (!LL_SPI_IsActiveFlag_TXE(acc_spi) || LL_SPI_IsActiveFlag_BSY(acc_spi)) {
         cur_time = HAL_GetTick();
         if (cur_time - start_time >= TIMEOUT_MS)
-            return ADXL345_TIMEOUT;
+            return TIMEOUT_ERR;
     }
     CS_PIN_HIGH(cs_port, cs_pin);
 
-    return ADXL345_OK;
+    return STATUS_OK;
 }
 
 static adxl345_status poll_rx(uint8_t addr, uint8_t length, uint8_t *dest) {

@@ -5,6 +5,7 @@
  * https://www.analog.com/media/en/technical-documentation/data-sheets/adxl345.pdf
  */
 
+#include "main.h"
 #include "stm32f4xx_ll_dma.h"
 #include "stm32f4xx_ll_spi.h"
 #include "stm32f4xx_ll_gpio.h"
@@ -59,12 +60,10 @@
 
 typedef enum adxl345_status {
     ADXL345_OK = 0,
-    ADXL345_INIT_ERROR,
-    ADXL345_TIMEOUT
+    ADXL345_TIMEOUT,
 } adxl345_status;
 
-adxl345_status ADXL345_Init(DMA_TypeDef *DMAx, uint32_t streamx, SPI_TypeDef *SPIx, GPIO_TypeDef *cs_portx, uint32_t cs_pinx);
-adxl345_status ADXL345_ProcessData(void);
-adxl345_status adxl345_ProcessInterrupt(void);
+sys_status ADXL345_Init(DMA_TypeDef *DMAx, uint32_t streamx, SPI_TypeDef *SPIx, GPIO_TypeDef *cs_portx, uint32_t cs_pinx);
+sys_status adxl345_ProcessInterrupt(void);
 
 extern volatile uint8_t acc_int_flag;

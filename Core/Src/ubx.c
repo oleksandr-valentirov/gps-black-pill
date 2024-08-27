@@ -1,5 +1,6 @@
 /* includes */
 #include <string.h>
+#include "main.h"
 #include "stm32f4xx_ll_dma.h"
 #include "stm32f4xx_ll_usart.h"
 #include "ubx.h"
@@ -158,22 +159,22 @@ static ubx_status set_ports(void);
 static ubx_status set_nav_rate(void);
 
 
-ubx_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx) {
+sys_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx) {
     usart = USARTx;
 
     /* update */
     if (set_ports())
-        return UBX_CFG_PRT_ERROR;
+        return UBX_INIT_ERROR;
     
     // LL_USART_Disable(usart);
     // LL_USART_SetBaudRate(usart, USART_CLOCK_MHZ, LL_USART_OVERSAMPLING_16, 115200);
     // LL_USART_Enable(usart);
 
     if (set_nav_rate())
-        return UBX_CFG_NAV_RATE_ERROR;
+        return UBX_INIT_ERROR;
 
     if (set_msg_rates())
-        return UBX_CFG_MSG_RATE_ERROR;
+        return UBX_INIT_ERROR;
 
     LL_DMA_SetMemoryAddress(DMAx, LL_DMA_STREAM_2, (uint32_t)(&(buffer[0])));
     LL_DMA_SetPeriphAddress(DMAx, LL_DMA_STREAM_2, LL_USART_DMA_GetRegAddr(USARTx));
@@ -182,10 +183,10 @@ ubx_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx) {
     LL_DMA_EnableStream(DMAx, LL_DMA_STREAM_2);
     LL_USART_EnableDMAReq_RX(USARTx);
 
-    return UBX_OK;
+    return STATUS_OK;
 }
 
-ubx_status UBX_ProcessData(void) {
+void UBX_ProcessData(void) {
     ubx_header *rx_header = (ubx_header *)buffer;
     ubx_nav_pvt *pvt = NULL;
     ubx_nav_dop *dop = NULL;
@@ -287,8 +288,6 @@ ubx_status UBX_ProcessData(void) {
         /* check next header */
         rx_header = (ubx_header *)(((uint8_t *)rx_header) + sizeof(ubx_header) + rx_header->length + UBX_CRC_SIZE);
     } while(((((uint8_t *)rx_header) + sizeof(ubx_header)) < (buffer + BUFF_LENGTH)) && rx_header->sync1 == 0xb5 && rx_header->sync2 == 0x62);
-
-    return UBX_OK;
 }
 
 static uint16_t ubx_calc_crc(uint32_t offset, uint16_t length) {

@@ -53,6 +53,8 @@ typedef enum sys_status {
   STATUS_OK = 0,
   TIMEOUT_ERR,
   NULL_ARG_ERR,
+  ADXL345_INIT_ERROR,
+  UBX_INIT_ERROR,
 } sys_status;
 /* USER CODE END ET */
 

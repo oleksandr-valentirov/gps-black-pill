@@ -75,8 +75,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  ubx_status ubx_status = UBX_OK;
-  adxl345_status acc_status = ADXL345_OK;
   sys_status status = STATUS_OK;
   uint32_t cur_time = 0, start_time = 0;
   uint8_t out_buf[sizeof(out_header) + sizeof(error_output)] = {0};
@@ -113,11 +111,11 @@ int main(void)
     /* block main, because PMU is a core subsystem */
     while (1) {}
   }
-  if ((ubx_status = UBX_Init(DMA2, USART1))) {
+  if ((status = UBX_Init(DMA2, USART1))) {
     /* block main, because GPS is a core device */
     while (1) {}
   }
-  if((acc_status = ADXL345_Init(DMA2, LL_DMA_STREAM_0, SPI1, Acc_CS_GPIO_Port, Acc_CS_Pin))) {
+  if((status = ADXL345_Init(DMA2, LL_DMA_STREAM_0, SPI1, Acc_CS_GPIO_Port, Acc_CS_Pin))) {
     /* notify but don't block main loop */
   }
   /* USER CODE END 2 */
@@ -131,7 +129,7 @@ int main(void)
       LL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
     }
     if (acc_int_flag) {
-      adxl345_ProcessInterrupt();
+      (void)adxl345_ProcessInterrupt();
     }
     if (gps_data_ready_flag) {
       gps_data_ready_flag = 0;

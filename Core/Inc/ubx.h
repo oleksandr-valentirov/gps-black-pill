@@ -13,5 +13,5 @@ typedef enum ubx_status {
     UBX_BadFix
 } ubx_status;
 
-ubx_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx);
-ubx_status UBX_ProcessData(void);
+sys_status UBX_Init(DMA_TypeDef *DMAx, USART_TypeDef *USARTx);
+void UBX_ProcessData(void);
