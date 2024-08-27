@@ -30,6 +30,7 @@ extern "C" {
 #include "stm32f4xx_hal.h"
 
 #include "stm32f4xx_ll_dma.h"
+#include "stm32f4xx_ll_i2c.h"
 #include "stm32f4xx_ll_rcc.h"
 #include "stm32f4xx_ll_bus.h"
 #include "stm32f4xx_ll_system.h"
@@ -48,7 +49,11 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef enum sys_status {
+  STATUS_OK = 0,
+  TIMEOUT_ERR,
+  NULL_ARG_ERR,
+} sys_status;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

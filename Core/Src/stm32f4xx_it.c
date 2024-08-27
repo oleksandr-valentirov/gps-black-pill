@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "adxl345.h"
+#include "bq25895.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
